@@ -2,7 +2,9 @@
 
 import optparse,os,random,sys,tempfile
 
-textlogTOslog2_path = "@bindir@/textlogTOslog2"
+default_jvm_path = "@default_jvm@"
+default_main_jar = "@jumpshot_dir@/lib/traceTOslog2.jar"
+default_trace_libdir = "@libdir@"
 
 # 
 # category,category_name,arrow/state/event,R,G,B,opacity,width
@@ -240,8 +242,16 @@ def my_system(s):
     else:
         return 0
 
-def textlog_to_slog2(textlog_file, slog2_file):
-    return my_system("%s %s -o %s" % (textlogTOslog2_path, textlog_file, slog2_file))
+def textlog_to_slog2(textlog_file, slog2_file,
+                     jvm_path, jvm_flags, trace_libdir, main_jar):
+    if 0:
+        return my_system("%s %s -o %s" 
+                         % (textlogTOslog2_path, textlog_file, slog2_file))
+    else:
+        flags = " ".join(jvm_flags)
+        return my_system("%s %s -Djava.library.path=%s -jar %s %s -o %s"
+                         % (jvm_path, flags, trace_libdir, main_jar, 
+                            textlog_file, slog2_file))
 
 def cleanup(files):
     for f in files:
@@ -266,6 +276,21 @@ def main():
     op.add_option("-c", "--stop_after_textlog", action="store_true", 
                   dest="stop_after_textlog", 
                   default=0, help="stop after generating textlog")
+    op.add_option("--jvm", action="store", dest="jvm_path",
+                  default=default_jvm_path, 
+                  help=("specify java command (default: %s)" % default_jvm_path))
+    op.add_option("--jvm_flags", action="append", dest="jvm_flags",
+                  default=[], 
+                  help=("specify flags given to java command (default: nothing)"))
+    op.add_option("--trace_libdir", action="store", dest="trace_libdir",
+                  default=default_trace_libdir, 
+                  help=("specify the directory in which to find libTraceInput.so (default: %s)" % default_trace_libdir))
+    op.add_option("--main_jar", action="store", dest="main_jar",
+                  default=default_main_jar,
+                  help=("specify the full path to an alternative traceTOslog2.jar (default: %s)" % default_main_jar))
+
+
+
     options,args = op.parse_args()
     if len(args) == 0:
         op.print_help()
@@ -319,7 +344,9 @@ def main():
         Es("%s: textlog generated to %s\n" % (sys.argv[0], textlog_file))
     # STEP 3:
     # convert textlog to slog2
-    ok = textlog_to_slog2(textlog_file, slog2_file)
+    ok = textlog_to_slog2(textlog_file, slog2_file,
+                          options.jvm_path, options.jvm_flags, 
+                          options.trace_libdir, options.main_jar)
     if not ok: return cleanup(files_to_remove)
     Es("%s: slog2 generated to %s\n" % (sys.argv[0], slog2_file))
     cleanup(files_to_remove)

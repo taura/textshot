@@ -1,16 +1,20 @@
+slog2_dir=../slog2/slog2sdk-1.2.6
+input_log_c=$(slog2_dir)/src/logformat/trace/logformat_trace_InputLog.c
 lib_LTLIBRARIES = libTraceInput.la
-libTraceInput_la_SOURCES = sslog_trace_impl.c ../slog2sdk-1.2.6/src/logformat/trace/logformat_trace_InputLog.c
-libTraceInput_la_CFLAGS = -I../slog2sdk-1.2.6/src/logformat/trace
-# ACLOCAL_AMFLAGS = -I m4
+libTraceInput_la_SOURCES = sslog_trace_impl.c $(input_log_c)
+libTraceInput_la_CFLAGS = -I$(slog2_dir)/src/logformat/trace
+ACLOCAL_AMFLAGS = -I m4
 dist_bin_SCRIPTS = sslog
 
-sslog_trace_impl.c : untar
-../slog2sdk-1.2.6/src/logformat/trace/logformat_trace_InputLog.c : untar
-untar : ../slog2sdk.tar.gz
-	cd .. ; tar xvf slog2sdk.tar.gz
+$(libTraceInput_la_SOURCES) : untar
+untar : ../slog2/slog2sdk.tar.gz
+	cd ../slog2 ; tar xvf slog2sdk.tar.gz
 	touch $@
 
 sslog : sslog.in
-	sed -e s%@bindir[@]%${bindir}%g $@.in > $@.tmp
+	sed -e s%[@]libdir[@]%${libdir}%g \
+		-e s%[@]jumpshot_dir[@]%${jumpshot_dir}%g \
+		-e s%[@]default_jvm[@]%${default_jvm}%g \
+		$@.in > $@.tmp
 	chmod +x $@.tmp
 	mv $@.tmp $@
