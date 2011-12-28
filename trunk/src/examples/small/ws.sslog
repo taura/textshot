@@ -1,0 +1,14 @@
+# category,category_name,event_or_state_or_arrow,R,G,B,transparency,width
+category,work,state,255,0,0,255,3
+category,steal,arrow,255,255,255,255,10
+category,spawn,event,0,0,255,255,3
+# state:
+# category_name,t_begin,t_end,y,info
+work,0.1,0.5,0,worker 0 working
+work,0.15,0.7,1,worker 1 working
+# arrow
+# category_name,t_begin,y_begin,t_end,y_end,info
+steal,0.12,0,0.15,1,stolen
+# event
+# category_name,t,y,info
+spawn,0.11,0,spawn f(x)
