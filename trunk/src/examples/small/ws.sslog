@@ -1,4 +1,4 @@
-# category,category_name,event_or_state_or_arrow,R,G,B,transparency,width
+# category,category_name,event_or_state_or_arrow,R,G,B,opacity,width
 category,work,state,255,0,0,255,3
 category,steal,arrow,255,255,255,255,10
 category,spawn,event,0,0,255,255,3
