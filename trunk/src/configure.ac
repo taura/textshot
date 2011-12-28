@@ -54,9 +54,16 @@ AC_CHECK_HEADERS([jni.h], [],
 
 # checks for jumpshot
 AC_ARG_WITH([jumpshot], 
-  [AS_HELP_STRING([--with-jumpshot], [specify jumpshot install directory X, in which to find X/lib/traceTOslog2.jar])])
-AC_CHECK_FILES([${with_jumpshot}/lib/traceTOslog2.jar], [],
-  [AC_MSG_ERROR([traceTOslog2.jar not found. use --with-jumpshot=XYZ so I can find XYZ/lib/traceTOslog2.jar])])
+  [AS_HELP_STRING([--with-jumpshot], [specify jumpshot install directory X, in which to find X/lib/traceTOslog2.jar])],
+  [],
+  [with_jumpshot=build])
+
+AS_IF([ test "x${with_jumpshot}" = xbuild ],
+  [ AC_MSG_NOTICE([--with-jumpshot not specified, going to install jumpshot to ${prefix}])
+    AC_SUBST([compile_jumpshot_too], [compile_jumpshot_too])
+    AC_SUBST([with_jumpshot], [${prefix}]) ],
+  [ AC_CHECK_FILES([${with_jumpshot}/lib/traceTOslog2.jar], [],
+      [AC_MSG_ERROR([traceTOslog2.jar not found in ${with_jumpshot}/lib])]) ])
 
 AC_SUBST([jumpshot_dir], [${with_jumpshot}])
 

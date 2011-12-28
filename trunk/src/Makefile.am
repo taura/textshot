@@ -7,14 +7,22 @@ ACLOCAL_AMFLAGS = -I m4
 dist_bin_SCRIPTS = sslog
 
 $(libTraceInput_la_SOURCES) : untar
-untar : ../slog2/slog2sdk.tar.gz
-	cd ../slog2 ; tar xvf slog2sdk.tar.gz
-	touch $@
 
-sslog : sslog.in
+sslog : sslog.in @compile_jumpshot_too@
 	sed -e s%[@]libdir[@]%${libdir}%g \
 		-e s%[@]jumpshot_dir[@]%${jumpshot_dir}%g \
 		-e s%[@]default_jvm[@]%${default_jvm}%g \
 		$@.in > $@.tmp
 	chmod +x $@.tmp
 	mv $@.tmp $@
+
+compile_jumpshot_too : untar
+	@echo '********** compiling and installing slog2 SDK **********'
+	cd $(slog2_dir) && ./configure --prefix=$(jumpshot_dir)
+	cd $(slog2_dir) && make
+	cd $(slog2_dir) && make install PREFIX=$(jumpshot_dir)
+	touch $@
+
+untar : ../slog2/slog2sdk.tar.gz
+	cd ../slog2 && tar xvf slog2sdk.tar.gz
+	touch $@
