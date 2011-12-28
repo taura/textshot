@@ -26,6 +26,64 @@ If you already have a slog2 (jumpshot-4) installation, you may instead do:
   make
   make install
 
+== FILE FORMAT ==
+
+The format is just like CSV.  Examples are given in src/examples
+directory.  One of the simplest looks like the following.
+
+  # state:
+  # category_name,t_begin,t_end,y,info
+  work,0.1,0.5,0,worker 0 working
+  work,0.15,0.7,1,worker 1 working
+  # arrow
+  # category_name,t_begin,y_begin,t_end,y_end,info
+  steal,0.12,0,0.15,1,stolen
+  # event
+  # category_name,t,y,info
+  spawn,0.11,0,spawn f(x)
+
+Each line describes either a 'state' (shown as a rectangle), an
+'arrow' (shown as an arrow), or an 'event' (shown as a small circle).
+Which one each line describes is, by default, determined by the
+number of fields:
+
+- an EVENT has FOUR fields (name, time, y-axis, and any info)
+- a STATE  has FIVE fields (name, time_begin, time_end, y-axis, and any info)
+- an ARROW  has SIX fields (name, time_begin, y_begin, time_end, y_end, and any info)
+
+The meaning of each field is commented above. The 'category_name' can
+be an arbitrary string not containing the separator (',' by default).
+In the above example, it implicitly introduces three category names
+work, steal, and spawn.  
+ 
+You may declare categories before they are used, to specify their
+appearances (color, opacity, line width) along with their kind (event,
+state, or arrow; what is called topology in slog2).  For example, you
+may put the following three declarations about work, steal, and spawn.
+With these declarations, the 'work' will be shown as read boxes,
+'steal' as white arrows, and spawn as green small circles.  Each will
+have opacity=255 (not transparent).
+
+  # category,category_name,event_or_state_or_arrow,R,G,B,opacity,width
+  category,work,state,255,0,0,255,3
+  category,steal,arrow,255,255,255,255,10
+  category,spawn,event,0,0,255,255,3
+
+== sslog : converter to slog2 ==
+
+After successful installation, you will have a command sslog, a
+converter from sslog format to slog2.
+
+  sslog a.sslog 
+
+will produce an slog2-formarted file. 
+The default filename is output.slog2.
+You can then visualize it by jumpshot.
+
+For options, try :
+
+  sslog -h
+
 == FILES ==
 
 Enjoy!
