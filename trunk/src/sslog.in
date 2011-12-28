@@ -1,0 +1,335 @@
+#!/usr/bin/python
+
+import optparse,os,random,sys,tempfile
+
+textlogTOslog2_path = "@bindir@/textlogTOslog2"
+
+# 
+# category,category_name,arrow/state/event,R,G,B,opacity,width
+# category_name,t,y,info
+# category_name,t_begin,t_end,y,info
+# category_name,t_begin,y_begin,t_end,y_end,info
+#
+
+def Es(s):
+    sys.stderr.write(s)
+
+class sslog_parser:
+    def __init__(self):
+        self.rg = random.Random()
+        self.rg.seed(918729)
+
+    def define_category(self, categories, category_name, topo, R, G, B, 
+                        opacity, width, wp):
+        assert (topo in [ "Event", "State", "Arrow" ]), topo
+        idx = len(categories["Event"]) + len(categories["State"]) + len(categories["Arrow"])
+        L = categories[topo].values()
+        l = len(L)
+        if l >= 10:
+            L.sort()
+            categories[topo][category_name] = L[l % 10]
+            return
+        if R is None: R = self.rg.randint(0, 255)
+        if G is None: G = self.rg.randint(0, 255)
+        if B is None: B = self.rg.randint(0, 255)
+        if opacity is None: opacity = 192
+        if width is None: width = 3
+        categories[topo][category_name] = idx
+        wp.write("0\t0.0\tCategory[ index=%(idx)d name=%(category_name)s"
+                 " topo=%(topo)s"
+                 " color=(%(R)d,%(G)d,%(B)d,%(opacity)d,true)"
+                 " width=%(width)d <   > ]\n"
+                 % { "idx" : idx, 
+                     "category_name" : category_name, 
+                     "topo" : topo,
+                     "R" : R,
+                     "G" : G,
+                     "B" : B,
+                     "opacity" : opacity,
+                     "width" : width })
+
+    def define_default_category(self, categories, category_name, topo, wp):
+        return self.define_category(categories, category_name, topo, 
+                                    None, None, None, None, None, wp)
+
+    def safe_int(self, x):
+        try:
+            return int(x)
+        except ValueError,e:
+            return None
+
+    def safe_float(self, x):
+        try:
+            return float(x)
+        except ValueError,e:
+            return None
+
+    def parse_category_line(self, filename, line_no, line, 
+                            separator, categories, wp):
+        fields = line.split(separator)
+        n = len(fields)
+        if n <= 1:
+            Es("%s:%d: category line must have at least one element\n" 
+               % (filename, line_no))
+            return 0            # NG
+        category_name = fields[1]
+        if category_name in categories["Event"] or \
+                category_name in categories["State"] or \
+                category_name in categories["Arrow"]:
+            Es("%s:%d: warning: category_name %s already defined (ignored)\n"
+               % category_name)
+            return 1            # OK, go ahead
+        topo = "State"                   # default topology: state
+        R,G,B,opacity,width = None,None,None,None,None
+        if n > 2: topo = fields[2].capitalize()
+        if topo not in [ "State", "Arrow", "Event" ]:
+            Es("%s:%d: topologymust be one of State, Arrow, or Event\n")
+            return 0            # NG
+        if n > 3: R = int(fields[3])
+        if n > 4: G = int(fields[4])
+        if n > 5: B = int(fields[5])
+        if n > 6: opacity = int(fields[6])
+        if n > 7: width = int(fields[7])
+        self.define_category(categories, category_name, topo, R, G, B, 
+                             opacity, width, wp)
+        return 1                # OK
+
+    def parse_stuff_line(self, filename, line_no, line, 
+                         separator, categories, wp):
+        fields = line.split(separator, 1)
+        category_name = fields[0]
+        if category_name in categories["Event"]:
+            topo = "Event"
+        elif category_name in categories["State"]:
+            topo = "State"
+        elif category_name in categories["Arrow"]:
+                topo = "Arrow"
+        else:
+            nf = len(line.split(separator, 5))
+            if nf <= 4:
+                topo = "Event"
+            elif nf == 5:
+                topo = "State"
+            else:
+                topo = "Arrow"
+            Es("%s:%d: category name %s not defined, default to %s\n" 
+               % (filename, line_no, category_name, topo))
+            self.define_default_category(categories, category_name, topo, wp)
+        idx = categories[topo][category_name]
+        if topo == "Event":
+            # category_name,t,y,info
+            fields = line.split(separator, 3)
+            if len(fields) < 3:
+                Es("%s:%d: category %s is event, which must have "
+                   "at least three fields (category_name,t,y)\n" 
+                   % (filename, line_no, category_name))
+                return 0
+            elif len(fields) == 3:
+                [ category_name,t_begin_s,y_begin_s ] = fields
+                info = ""
+            elif len(fields) == 4:
+                [ category_name,t_begin_s,y_begin_s,info ] = fields
+            else:
+                bomb()
+            t_end_s = t_begin_s
+            y_end_s = y_begin_s
+        elif topo == "State":
+            # category_name,t_begin,t_end,y,info
+            fields = line.split(separator, 4)
+            if len(fields) < 4:
+                Es("%s:%d: category %s is state, which must have "
+                   "at least four fields (category_name,t_begin,t_end,y)\n" 
+                   % (filename, line_no, category_name))
+                return 0
+            elif len(fields) == 4:
+                [ category_name,t_begin_s,t_end_s,y_begin_s ] = fields
+                info = ""
+            elif len(fields) == 5:
+                [ category_name,t_begin_s,t_end_s,y_begin_s,info ] = fields
+            else:
+                bomb()
+            y_end_s = y_begin_s
+        elif topo == "Arrow":
+            # category_name,t_begin,y_begin,t_end,y_end,info
+            fields = line.split(separator, 5)
+            if len(fields) < 5:
+                Es("%s:%d: category %s is arrow, which must have"
+                   " at least five fields"
+                   " (category_name,t_begin,t_end,y_begin,y_end)\n" 
+                   % (filename, line_no, category_name))
+                return 0
+            elif len(fields) == 5:
+                [ category_name,t_begin_s,y_begin_s,t_end_s,y_end_s ] = fields
+            elif len(fields) == 6:
+                [ category_name,t_begin_s,y_begin_s,t_end_s,y_end_s,info ] = fields
+            else:
+                bomb()
+        else:
+            bomb()
+        t_begin = self.safe_float(t_begin_s)
+        if t_begin is None:
+            Es("%s:%d: t_begin field (%s) not float\n" 
+               % (filename, line_no, t_begin_s))
+            Es("  %s\n" % line)
+            return 0
+        t_end = self.safe_float(t_end_s)
+        if t_end is None:
+            Es("%s:%d: t_end field (%s) not float\n" 
+               % (filename, line_no, t_end_s))
+            Es("  %s\n" % line)
+            return 0
+        y_begin = self.safe_int(y_begin_s)
+        if y_begin is None:
+            Es("%s:%d: y_begin field (%s) not int\n" 
+               % (filename, line_no, y_begin_s))
+            Es("  %s\n" % line)
+            return 0
+        y_end = self.safe_int(y_end_s)
+        if y_end is None:
+            Es("%s:%d: y_end field (%s) not int\n" 
+               % (filename, line_no, y_end_s))
+            Es("  %s\n" % line)
+            return 0
+        wp.write("1\t%(t_end)f\tPrimitive[ TimeBBox(%(t_begin)f,%(t_end)f)"
+                 " Category=%(idx)d (%(t_begin)f, %(y_begin)d) (%(t_end)f,"
+                 " %(y_end)d) < %(info)s > ]\n" % { 
+                "t_begin" : t_begin,
+                "t_end"   : t_end,
+                "y_begin" : y_begin,
+                "y_end"   : y_end,
+                "idx" : idx,
+                "info" : info })
+        return 1
+                
+    def parse_sslog(self, filename, categories, separator, wp):
+        """
+        parse super simple log format file (filename) and generate
+        a textlog with each line augumented with a sort key 
+        ((0<tab>L0.0) or (1<tab>end_time))
+        """
+        fp = open(filename, "rb")
+        line_no = 0
+        r = 1
+        for line in fp:
+            line = line.strip()
+            line_no = line_no + 1
+            if len(line) == 0 or line[0] == "#": continue
+            head_rest = line.split(separator, 1)
+            if len(head_rest) != 2:
+                Es("%s:%d: lines must have at least two fields\n"
+                   % (filename, line_no))
+                Es("  %s\n" % line)
+                return 0
+            head,rest = head_rest
+            if head == "category":
+                r = self.parse_category_line(filename, line_no,
+                                             line, separator, categories, wp)
+                if r == 0: break
+            else:
+                r = self.parse_stuff_line(filename, line_no, 
+                                          line, separator, categories, wp)
+                if r == 0: break
+        fp.close()
+        return r
+
+
+def my_system(s):
+    Es("%s: executing [%s]\n" % (sys.argv[0], s))
+    if os.system(s) == 0:
+        return 1                # OK
+    else:
+        return 0
+
+def textlog_to_slog2(textlog_file, slog2_file):
+    return my_system("%s %s -o %s" % (textlogTOslog2_path, textlog_file, slog2_file))
+
+def cleanup(files):
+    for f in files:
+        os.remove(f)
+
+def main():
+    op = optparse.OptionParser(usage="usage: %prog [options] super_simple_log_file ... ")
+    op.add_option("-s", "--separator", dest="separator", 
+                  help="use CHAR as the column separator", metavar="CHAR",
+                  default=",")
+    op.add_option("-o", "--output", dest="slog2_filename", 
+                  help="generate slog2 to SLOG2_FILE", metavar="SLOG2_FILE",
+                  default="output.slog2")
+    op.add_option("-t", "--textlog", dest="textlog_filename", 
+                  help="generate textlog to TEXTLOG_FILE", metavar="TEXTLOG_FILE")
+    op.add_option("-k", "--keyed_textlog", dest="keyed_textlog_filename", 
+                  help="generate textlog with sort keys to KEYED_TEXTLOG_FILE", 
+                  metavar="KEYED_TEXTLOG_FILE")
+    op.add_option("-b", "--stop_after_keyed_textlog", action="store_true", 
+                  dest="stop_after_keyed_textlog", 
+                  default=0, help="stop after generating keyed textlog")
+    op.add_option("-c", "--stop_after_textlog", action="store_true", 
+                  dest="stop_after_textlog", 
+                  default=0, help="stop after generating textlog")
+    options,args = op.parse_args()
+    if len(args) == 0:
+        op.print_help()
+        return 1
+    # obtain necessary file names
+    super_simple_log_files = args
+    slog2_file = options.slog2_filename
+    keyed_textlog_file = options.keyed_textlog_filename
+    textlog_file = options.textlog_filename
+    files_to_remove = []
+    # write-open a textlog file
+    wp = None
+    if keyed_textlog_file is None:
+        # no file name for keyed textlog given
+        if options.stop_after_keyed_textlog:
+            # and the user didn't ask to leave it, so
+            # it's temporary file
+            keyed_textlog_file = "output.keyed_textlog"
+        else:
+            wp = tempfile.NamedTemporaryFile(delete=False)
+            keyed_textlog_file = wp.name
+            files_to_remove.append(keyed_textlog_file)
+    # STEP 1: 
+    # process super simple logs and generate textlog with sort keys
+    if wp is None: wp = open(keyed_textlog_file, "wb")
+    p = sslog_parser()
+    ok = 1
+    categories = { "Event" : {}, "State" : {}, "Arrow" : {} }
+    for sslog_file in super_simple_log_files:
+        ok = p.parse_sslog(sslog_file, categories, options.separator, wp)
+        if ok == 0: break
+    wp.close()
+    if not ok: return cleanup(files_to_remove)
+    if keyed_textlog_file not in files_to_remove:
+        Es("%s: keyed_textlog generated to %s\n" % (sys.argv[0], keyed_textlog_file))
+    # STEP 2:
+    # sort with t_end field to get sorted textlog (with keys stripped)
+    if textlog_file is None:
+        # no file name for keyed textlog given
+        if options.stop_after_textlog:
+            # and the user didn't ask to leave it, so
+            # it's temporary file
+            textlog_file = "output.textlog"
+        else:
+            wp = tempfile.NamedTemporaryFile(delete=False)
+            textlog_file = wp.name
+            files_to_remove.append(textlog_file)
+    ok = my_system("sort -k 1,2 -n %s | cut -f 3- > %s" % (keyed_textlog_file, textlog_file))
+    if not ok: return cleanup(files_to_remove)
+    if textlog_file not in files_to_remove:
+        Es("%s: textlog generated to %s\n" % (sys.argv[0], textlog_file))
+    # STEP 3:
+    # convert textlog to slog2
+    ok = textlog_to_slog2(textlog_file, slog2_file)
+    if not ok: return cleanup(files_to_remove)
+    Es("%s: slog2 generated to %s\n" % (sys.argv[0], slog2_file))
+    cleanup(files_to_remove)
+    return ok
+
+if __name__ == "__main__":
+    if main():
+        sys.exit(0)
+    else:
+        sys.exit(1)
+
+
+
