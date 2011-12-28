@@ -1,0 +1,498 @@
+\documentclass{article}
+\setlength{\oddsidemargin}{-1.3truecm}
+\setlength{\evensidemargin}{-1.3truecm}
+\setlength{\textwidth}{18.5truecm}
+\setlength{\headsep}{1truecm}
+\setlength{\topmargin}{-2truecm}
+\setlength{\textheight}{25truecm}
+
+
+\title{Using Jumpshot for Your Event Visualization}
+\author{Kenjiro Taura}
+\date{}
+\begin{document}
+\maketitle
+\section{Jumpshot and SLOG2}
+
+\begin{itemize}
+\item SLOG2 is a log file format.
+\item Jumpshot is a visualizer of SLOG2.  Jumpshot supports other
+(older) log formats such as clog, and they seem superseded by SLOG2.
+\item Jumpshot (visualizer) and slog2 are packaged into a single package.
+Visit 
+\begin{verbatim}
+http://www.mcs.anl.gov/research/projects/perfvis/download/index.htm#slog2sdk
+\end{verbatim}
+and download slog2sdk 
+(Direct link: 
+\begin{verbatim}
+ftp://ftp.mcs.anl.gov/pub/mpi/slog2/slog2sdk.tar.gz
+\end{verbatim}
+) there.
+
+\item Also visit:
+\begin{verbatim}
+http://www.mcs.anl.gov/research/projects/perfvis/software/viewers/index.htm
+\end{verbatim}
+for a brief description about Jumpshot.
+\end{itemize}
+
+\section{How to use it for your own event visualization}
+Our purpose here is to use it for visualizing events in our program.
+For example, we may want to show what each processor is doing at which time interval.
+Such visualization could be done by generating postscripts by yourself, but such ad-hoc
+solutions immediately face both functional and scalability problems.  
+We like to take advantage of existing tools designed exactly for this purpose.
+
+While SLOG2 and Jumpshot are primarily designed for MPI event visualization (such
+as MPI\_Send and MPI\_Recv), there are nothing specific to MPI in Jumpshot or SLOG2.
+In summary, 
+\begin{itemize}
+\item Most abstractly, SLOG2 is just a general purpose format 
+describing rectangles (what they call ``State''),
+arrows (``Arrow''), and a point (``Event'') on 2D canvas.
+\item Jumpshot is a visualizer displaying any SLOG2 file.
+\end{itemize}
+
+So {\em implementing a custom visualizer amounts to defining your log
+  format and making a converter from it to SLOG2.}  SLOG2 actually
+comes with a terse README file about how to implement such a converter
+(they somehow call it a custom TRACE-API), along with a sample program
+under {\tt trace\_sample/} directory, which they call {\it textlog}.
+They recommend us to modify it to implement our own custom formats.
+But the description is nothing but a minimum.  The main purpose of
+this document is to describe in somewhat more detail how to exactly
+follow through this process.
+
+\section{Building Jumpshot and textlog}
+Visit jumpshot website above and download slog2sdk.  Building is as simple as 
+configure, make, and make install
+\begin{quote}
+\begin{verbatim}
+./configure --with-java=... --prefix=...
+make
+make install PREFIX=...
+\end{verbatim}
+\end{quote}
+You probably need {\tt --with-java} in the configure.
+Otherwise the configure will fail to find {\tt jni.h}.
+In my case it was {\tt --with-java=/usr/lib/jvm/java-6-sun.}  
+On Ubuntu, the default
+JDK is OpenJDK, which I didn't bother to try.  I think It's safe to stick to Sun JDK.  
+See Appendix~\ref{sec:sunjdk} for how to install and use Sun JDK instead of the default OpenJDK in Ubuntu.
+
+\paragraph{CAUTION:} Because of the way the Makefile of slog2sdk is written, 
+the {\tt make} above does not stop even when it failed to compile some packages.
+This is confusing when you customize textlog and recompile it.  Always check by yourself
+if your customized textlog got compiled successfully.
+
+
+Just go to {\tt trace\_sample/logfiles} and try a few sample files there.
+\begin{quote}
+\begin{verbatim}
+cd trace_sample/logfiles
+textlogTOslog2 data.txt  # convert textlog (data.txt) to slog2 (data.slog2)
+jummpshot data.slog2     # and visualize it!
+\end{verbatim}
+\end{quote}
+It should bring up a visualizer.
+
+\section{Fixing/customizing textlog}
+Textlog already seems a fairly general purpose format.
+It is approximately just a 'textized' version of the slog2 format.
+So it is a useful tool to learn what's actually in slog2 files.
+
+It should be straightforward for you to somehow generate a textlog.
+You can do that by directly generating one from your program, 
+by writing a small converter from your format to textlog, or
+by pulling data from database and format it in textlog, etc.
+So I initially expected that I can just generate a textlog file
+to visualize events from whatever programs I need to analyze.
+
+Along the way, however, I found that
+textlog is not written with enough generality.  For example, 
+a line in textlog reads:
+\begin{quote}
+\begin{verbatim}
+Category[ index=183 name=User_Compute topo=State \
+  color=(255,165,0,127,true) width=1 < AA=%d BB=%d > ]
+\end{verbatim}
+\end{quote}
+I thought I can change the last element {\tt < AA=\%d, BB=\%d >} which looks like a template 
+of application-specific attributes into something like:
+\begin{quote}
+\begin{verbatim}
+Category[ index=183 name=User_Compute topo=State \
+  color=(255,165,0,127,true) width=1 < x=%d y=%d z=%d n_particles=%d > ]
+\end{verbatim}
+\end{quote}
+But it died with a segmentation fault.  It turned out that the parser was written assuming the last element has exactly
+two placeholders.  It was also assumed that each element is 32 bits (more precisely, the same size as {\tt int}).
+So you can put two {\tt int}s, two {\tt float}s, or one {\tt int} and one {\tt float}, but pretty much nothing else.
+Changing it takes rewriting source code of textlog.
+
+I thought it could be made more general-purpose if it can take
+an arbitrary string in the above information field ('{\tt < \ldots >}').
+Slog2 actually supports a string field, but it wasn't sufficient to just write
+{\tt '\%s'} inside '{\tt < \ldots >}' due to a similar reason.
+So my endeavor toward an easy-to-use yet general-purpose event log format 
+took more time than initially anticipated.  
+
+I herein describe the process step by step.
+
+\section{Digging deeper into source structure}
+\subsection{Installing slog2 toolkit}
+The installation procedure of slog2 tool described in the beginning of this document 
+produces, among others, 
+\begin{enumerate}
+\item {\tt \$(PREFIX)/bin/jumpshot} : visualizes slog2 file
+\item {\tt \$(PREFIX)/bin/textlogTOslog2} : a shell script that calls traceTOslog2.jar
+\item {\tt \$(PREFIX)/lib/traceTOslog2.jar} : a Java program that converts textlog to slog2
+\item {\tt \$(PREFIX)/lib/trace\_sample/libTraceInput.so} : linked from traceTOslog2.jar
+\end{enumerate}
+
+If you need to customize textlog, you will somehow change {\tt libTraceInput.so}.
+Below, I will explain how the main converter script, {\tt textlogTOslog2,} finally 
+ends up with calling procedures in {\tt libTraceInput.so}, 
+which you might want to customize.
+
+\subsection{textlogTOslog2 shell script}
+{\tt textlogTOslog2} invokes {\tt traceTOslog2.jar} with 
+a path to JNI libraries ({\tt -Djava.library.path=\ldots}); essentially, it
+just does:
+\begin{quote}
+{\tt java -Djava.library.path=\$(PREFIX)/lib/trace\_sample -jar \$(PREFIX)/lib/traceTOslog2.jar}
+\end{quote}
+
+\subsection{traceTOslog2.jar}
+Which class does the above command end up with invoking as a main class?
+Main class of a jar file is specified in a special {\tt MANIFEST.MF} file in it.
+You can consult it by:
+\begin{quote}
+{\tt jar xvf traceTOslog2.jar}
+\end{quote}
+and seeing the content of {\tt MANIFEST.MF}, which says
+\begin{quote}
+\begin{verbatim}
+Manifest-Version: 1.0
+Created-By: 1.6.0_26 (Sun Microsystems Inc.)
+Main-Class: logformat.slog2.output.TraceToSlog2
+\end{verbatim}
+\end{quote}
+So, the main method of the above command is in 
+{\tt src/logformat/slog2/output/TraceToSlog2.jara}
+
+\subsection{Linking traceTOslog2.jar and libTraceInput.so}
+How does the above command line successfully bring
+the library {\tt libTraceInput.so} in the running Java Virtual Machine? 
+It's a JNI thing.
+{\tt http://www.ne.jp/asahi/hishidama/home/tech/java/jni.html}
+is a useful page introducing how JNI works.
+
+To get straight to the answer, static code section of the main class
+({\tt TraceToSlog2}, a class defined in the java source file {\tt src/logformat/slog2/output/TraceToSlog2.jara}) says:
+
+\begin{quote}
+\begin{verbatim}
+public class TraceToSlog2
+{
+    static {
+        System.loadLibrary( "TraceInput" ); 
+    }
+    ...
+}
+\end{verbatim}
+\end{quote}
+This is where the attempt to link {\tt libTraceInput.so} takes place, and,
+given the argument to {\tt -Djava.library.path} option correctly specifies
+the directory that hosts {\tt libTraceInput.so}, it will succeed.
+
+\subsection{In the main method of TraceToSlog2}
+In the beginning of {\tt TraceToSlog2}'s {\tt main} method it creates an {\tt InputLog}
+object to read the specified textlog file.
+
+\begin{quote}
+\begin{verbatim}
+        dobj_ins   = new logformat.trace.InputLog( trace_filespec );
+\end{verbatim}
+\end{quote}
+
+{\tt InputLog} class is defined in {\tt src/logformat/trace/InputLog.java} and has a set of
+native declarations, which java programs expect will be defined in an external {\tt .so } (or {\tt .dll}) file
+({\tt libTraceInput.so} in our case).
+
+\begin{quote}
+\begin{verbatim}
+    public  native boolean    open();
+    public  native boolean    close();
+    public  native int        peekNextKindIndex();
+    public  native Category   getNextCategory();
+    public  native YCoordMap  getNextYCoordMap();
+    public  native Primitive  getNextPrimitive();
+    public  native Composite  getNextComposite();
+\end{verbatim}
+\end{quote}  
+
+
+\subsection{Constituents of libTraceInput.so}
+{\tt libTraceInput.so} consists of two C sources:
+\begin{enumerate}
+\item {\tt src/logformat/trace/logformat\_trace\_InputLog.c} and
+\item {\tt trace\_sample/src/trace\_impl.c},
+\end{enumerate}
+of which the former is a small wrapper that defines above functions
+interfacing Java world and C world.  For example, the {\tt open}
+method of the {\tt InputLog} class is defined in {\tt logformat\_trace\_InputLog.c} as:
+
+\begin{quote}
+\begin{verbatim}
+JNIEXPORT jboolean JNICALL
+Java_logformat_trace_InputLog_open( JNIEnv *env, jobject this )
+{
+
+    ...
+    /* c_filespec = JNU_GetStringNativeChars( env, jfilespec ); */
+    ierr  = TRACE_Open( c_filespec, &tracefile );
+    ...
+}
+\end{verbatim}
+\end{quote}
+
+It is the above {\tt TRACE\_Open} function that actually does application-specific jobs. 
+It is defined in the other C file, {\tt trace\_impl.c}, as:
+
+\begin{quote}
+\begin{verbatim}
+TRACE_EXPORT
+int TRACE_Open( const char filespec[], TRACE_file *fp )
+{
+    TRACE_file     tr;
+
+    if ( strncmp( filespec, "-h", 2 ) == 0 ) {
+        *fp  = NULL;
+        return 0;
+    }
+
+    tr             = (TRACE_file) malloc( sizeof(struct _trace_file) );
+    tr->fd         = fopen( filespec, "r" );
+    if ( tr->fd == NULL ) {
+        *fp  = NULL;
+        return 1;
+    }
+
+    tr->max_types  = MAX_CATEGORIES;
+    tr->num_types  = 0;
+    tr->types      = (DRAW_Category **) malloc( tr->max_types
+                                              * sizeof(DRAW_Category *) );
+    tr->ymap       = NULL; 
+    tr->prime      = NULL;
+    tr->cmplx      = NULL;
+	*fp            = tr;
+    return 0;
+}
+\end{verbatim}
+\end{quote}
+
+Similar things happen for other native functions (all ending up with
+TRACE\_xxxx functions in {\tt trace\_impl.c}).
+
+Details are not important; the point is we finally got to the point
+where customizations really take place.  Now we are confident that
+these {\tt TRACE\_xxx} functions are those we need to modify (if
+necessary at all).
+
+\section{So how I customized textlog after all?}
+I implemented a program that can take a free text in the info fields (inside '{\tt < \ldots >}').
+Along the way, debugger was a must. How to debug JNI programs with jdb
+is described in Appendix~\ref{sec:jdb}.
+In this new format, a category element ignores whatever is written in the label part.
+
+\begin{quote}
+{\tt Category[ index=0 name=message topo=Arrow color=(255,255,255,255,true) width=3 < {\it ignored} > ]}
+\end{quote}
+It can be empty, so 
+\begin{quote}
+\begin{verbatim}
+Category[ index=0 name=message topo=Arrow color=(255,255,255,255,true) width=3 <  > ]
+\end{verbatim}
+\end{quote}
+is enough; you still need a space right after the '{\tt <}' and another space right before '{\tt >}' (so you need
+at least two spaces between them).   Do not expect
+textlog to be flexible.  
+
+Now you can write free-formatted texts in Primitive and Composite, like:
+
+\begin{verbatim}
+Primitive[ TimeBBox(0.001500,0.0020000) Category=0 (0.001500, 2) (0.0020000, 3) \
+   < anything you want, like msg_tag=3, msg_size=2000 > ]
+Composite[ TimeBBox(0.001000,0.0040000) Category=183 NumPrimes=3 \
+   < whatever you want > ]
+\end{verbatim}
+When you right click on these boxes, it will bring up info boxes saying 
+``{\tt anything you want, like msg\_tag=3, msg\_size=2000}'' or 
+``{\tt whatever you want}.''
+
+The source file that needs a modification is of course
+{\tt trace\_sample/src/trace\_impl.c}.
+Two functions needed to be modified:
+
+\begin{itemize}
+\item {\tt TRACE\_Peek\_next\_category}, so that it ignores stuff inside '{\tt <  >}' and treat
+it as if it is '{\tt \%s}'.
+\item {\tt TRACE\_Peek\_next\_primitive}, so that it simply takes everything inside
+'{\tt <  >}' and stores it as the info.
+\item {\tt TRACE\_Peek\_next\_composite} (ditto).
+\end{itemize}
+
+It is in {\tt my\_trace\_impl.c}.  All you need to do to plug in this patch
+is to:
+\begin{itemize}
+\item replace the original {\tt trace\_impl.c} 
+(e.g. {\tt cp my\_trace\_impl.c slog2sdk-1.2.6/trace\_sample/src/trace\_impl.c})
+\item compile {\tt trace\_sample} (or just 'make' {\tt slog2sdk-1.2.6} again)
+\end{itemize}
+
+\section{Super Simple Log Format}
+On top of somewhat more general textlog which supports free text, 
+I implemented an even simpler format to get straight to the point.
+Let's call it {\it Super Simple Log Format (sslog)}.  An example:
+
+\begin{quote}
+\begin{verbatim}
+# category,category_name,event_or_state_or_arrow,R,G,B,transparency,width
+category,work,state,255,0,0,127,3
+category,steal,arrow,255,255,255,127,3
+# state:
+# category_name,t_begin,t_end,y,info
+work,0.1,0.5,0,worker 0 working
+work,0.15,0.7,1,worker 1 working
+# arrow
+# category_name,t_begin,y_begin,t_end,y_end,info
+steal,0.12,0,0.15,1,stolen
+\end{verbatim}
+\end{quote}
+
+{\tt sslog} (installed when you make in the toplevel ({\tt slog2ex})
+directory) converts it to slog2 format.  Textlog (with the free text
+support descried above) is used as an intermediate step.
+
+\begin{quote}
+\begin{verbatim}
+$ install/bin/sslog ws.txt
+install/bin/sslog: executing [sort -k 1,2 -n /tmp/tmp1Vji3d | cut -f 3- > /tmp/tmpklf8Rt]
+install/bin/sslog: executing [/home/tau/sproj/slog2ex/install/bin/textlogTOslog2 \
+                             /tmp/tmpklf8Rt -o output.slog2]
+
+   ... message from textlogTOslog2 omitted ...
+
+install/bin/sslog: slog2 generated to output.slog2
+\end{verbatim}
+\end{quote}
+
+In general,
+\begin{itemize}
+\item it takes any number of super simple log format files,
+\item reads events from all files, sorts them in the timestamp order so textlogTOslog2 does not complain,
+\item and calls textlogTOslog2 to get slog2 file.
+\end{itemize}
+Options (you can see by {\tt sslog -h}):
+
+\begin{itemize}
+\item {\tt -s} {\it CHAR} : uses {\it CHAR} as the column separator instead of the default (comma)
+\item {\tt -o} {\it SLOG2\_FILE} : generates slog2 to {\it SLOG2\_FILE}
+instead of the default ({\tt output.slog2})
+\item {\tt -t} {\it TEXTLOG\_FILE} : generates an intermediate textlog to {\it TEXTLOG\_FILE} and leave it
+\item {\tt -k} {\it KEYED\_TEXTLOG\_FILE} : generates an intermediate textlog, with each line augmented
+with sort key (keyed textlog), to {\it KEYED\_TEXTLOG\_FILE} and leave it.
+\item {\tt -b} : stops after generating the keyed textlog and leave it
+\item {\tt -c} : stops after generating textlog and leave it
+\end{itemize}
+
+\appendix
+
+\section{Where is the code}
+\begin{quote}
+\begin{verbatim}
+svn co svn+ssh://www.logos.ic.i.u-tokyo.ac.jp/home/tau/SVN/slog2ex
+\end{verbatim}
+\end{quote}
+It contains slog2sdk-1.2.6.tar.gz without any modification.  
+See README in the toplevel directory for installation.
+
+\section{Debugging JNI programs}\label{sec:jdb}
+\begin{itemize}
+\item debugging C part is as usual. Invoke java under gdb, set breakpoint in C code
+\item debugging java part is trickier.
+\end{itemize}
+
+For one thing, jdb is normally invoked by
+\begin{quote}
+  {\tt jdb} {\it class\_name args \ldots}
+\end{quote}
+
+Since it expects a class name in the argument list, 
+debugging java programs in a jar file, whose main function is defined inside it,
+must use a trick.
+
+More specifically, java program originally invoked by:
+\begin{quote}
+  {\tt java -jar} {\it JARFILE args \ldots}
+\end{quote}
+should be invoked under jdb by:
+\begin{quote}
+  {\tt java -classpath} {\it JARFILE} {\it main\_class args \ldots}
+\end{quote}
+Another caveat when using emacs.  
+Somehow, M-x jdb doesn't like the space between {\tt -classpath} and 
+{\it JARFILE}, so within emacs, it must be
+\begin{quote}
+  {\tt java -classpath}{\it JARFILE} {\it main\_class args \ldots}
+\end{quote}
+You also need to give {\tt -Djava.library.path} option for JNI library to get
+linked, which is fortunately recognized by jdb too.
+This is the command line that finally worked, 
+corresponding to {\tt textlogToSlog2 a.txt}:
+
+\begin{quote}
+\begin{verbatim}
+jdb -sourcepath${slog2ex_top}/slog2sdk-1.2.6/src -classpath${slog2ex_top}/install/lib/traceTOslog2.jar: -Djava.library.path=${slog2ex_top}/install/lib/trace_sample logformat.slog2.output.TraceToSlog2 a.txt
+\end{verbatim}
+\end{quote}
+The jdb command line corresponding to {\tt jumpshot a.slog2} is
+\begin{quote}
+\begin{verbatim}
+  jdb -sourcepath${slog2ex_top}/slog2sdk-1.2.6/src -classpath${slog2ex_top}/install/lib/jumpshot.jar viewer.first.FirstFrame a.slog2
+\end{verbatim}
+\end{quote}  
+
+Setting breakpoint is '{\tt stop in} {\it class.method}'
+
+
+\section{Use Sun JDK instead of OpenJDK on Ubuntu}
+\label{sec:sunjdk}
+You first install it by:
+\begin{quote}
+\begin{verbatim}
+$ sudo add-apt-repository "deb http://archive.canonical.com/ $(lsb_release -cs) partner"
+$ sudo apt-get update
+$ sudo apt-get install sun-java6-jdk
+\end{verbatim}
+\end{quote}
+This still doesn't choose Sun JDK {\it as default} JDK.  To make it happen, try
+\begin{quote}
+\begin{verbatim}
+$ update-java-alternatives -l
+ java-6-openjdk 1061 /usr/lib/jvm/java-6-openjdk
+ java-6-sun 63 /usr/lib/jvm/java-6-sun
+\end{verbatim}
+\end{quote}
+to see which java implementations are available and choose what you want by:
+\begin{quote}
+\begin{verbatim}
+$ update-java-alternatives -s java-6-sun
+\end{verbatim}
+\end{quote}  
+
+
+\end{document}
+

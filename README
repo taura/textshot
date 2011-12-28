@@ -1,0 +1,15 @@
+This directory contains everything you need to use textshot event log.
+A converter from the textshot log to slog2 (the native format
+understood by jumpshot).  It also contains the original, intact
+tarball of slog2 SDK for your convenience.
+
+== FILES ==
+src/  sources (modified trace_impl.c and sslog.in)
+ex/   some examples
+doc/  some documents
+done/ an empty directory to which Makefile records what has been done
+slog2sdk.tar.gz : unmodified slog2 + jumpshot toolkit
+
+Enjoy!
+
+
