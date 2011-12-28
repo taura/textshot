@@ -1,14 +1,32 @@
-This directory contains everything you need to use textshot event log.
-A converter from the textshot log to slog2 (the native format
-understood by jumpshot).  It also contains the original, intact
-tarball of slog2 SDK for your convenience.
+This directory contains everything you need to use sslog, a super
+simple log file format for performance visualization using jumpshot-4.
+A converter from the super simple log to slog2 (the native format
+understood by jumpshot-4).  It also contains the original, intact
+tarball of slog2 SDK.  
+
+You can either point to existing slog2 (jumpshot) installation in
+which case you do not need to compile the jumpshot, or can let it
+automatically install slog2 from the bundled tarball.  Either way, it
+still needs a part of its source file for compling sslog, so the
+tarball is always unpacked.
+
+== INSTALL ==
+
+The standard procedure will compile sslog and slog2sdk automatically.
+
+  cd src;
+  ./configure --with-java=... [ --prefix=... ]
+  make
+  make install
+
+If you already have a slog2 (jumpshot-4) installation, you may instead do:
+
+  cd src;
+  ./configure --with-jumpshot=... --with-java=... [ --prefix=... ]
+  make
+  make install
 
 == FILES ==
-src/  sources (modified trace_impl.c and sslog.in)
-ex/   some examples
-doc/  some documents
-done/ an empty directory to which Makefile records what has been done
-slog2sdk.tar.gz : unmodified slog2 + jumpshot toolkit
 
 Enjoy!
 
