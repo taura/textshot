@@ -303,6 +303,7 @@ def main():
     files_to_remove = []
     # write-open a textlog file
     wp = None
+    wp2 = None
     if keyed_textlog_file is None:
         # no file name for keyed textlog given
         if options.stop_after_keyed_textlog:
@@ -310,9 +311,9 @@ def main():
             # it's temporary file
             keyed_textlog_file = "output.keyed_textlog"
         else:
-            wp = tempfile.NamedTemporaryFile(delete=False)
+            wp = tempfile.NamedTemporaryFile() # delete=False
             keyed_textlog_file = wp.name
-            files_to_remove.append(keyed_textlog_file)
+            # files_to_remove.append(keyed_textlog_file)
     # STEP 1: 
     # process super simple logs and generate textlog with sort keys
     if wp is None: wp = open(keyed_textlog_file, "wb")
@@ -322,7 +323,8 @@ def main():
     for sslog_file in super_simple_log_files:
         ok = p.parse_sslog(sslog_file, categories, options.separator, wp)
         if ok == 0: break
-    wp.close()
+    # wp.close()
+    wp.flush()
     if not ok: return cleanup(files_to_remove)
     if keyed_textlog_file not in files_to_remove:
         Es("%s: keyed_textlog generated to %s\n" % (sys.argv[0], keyed_textlog_file))
@@ -335,9 +337,9 @@ def main():
             # it's temporary file
             textlog_file = "output.textlog"
         else:
-            wp = tempfile.NamedTemporaryFile(delete=False)
-            textlog_file = wp.name
-            files_to_remove.append(textlog_file)
+            wp2 = tempfile.NamedTemporaryFile() # delete=False
+            textlog_file = wp2.name
+            # files_to_remove.append(textlog_file)
     ok = my_system("sort -k 1,2 -n %s | cut -f 3- > %s" % (keyed_textlog_file, textlog_file))
     if not ok: return cleanup(files_to_remove)
     if textlog_file not in files_to_remove:
