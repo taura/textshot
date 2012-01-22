@@ -340,7 +340,7 @@ def main():
             wp2 = tempfile.NamedTemporaryFile() # delete=False
             textlog_file = wp2.name
             # files_to_remove.append(textlog_file)
-    ok = my_system("sort -k 1,2 -n %s | cut -f 3- > %s" % (keyed_textlog_file, textlog_file))
+    ok = my_system("sort -k 2 -n %s | cut -f 3- > %s" % (keyed_textlog_file, textlog_file))
     if not ok: return cleanup(files_to_remove)
     if textlog_file not in files_to_remove:
         Es("%s: textlog generated to %s\n" % (sys.argv[0], textlog_file))
