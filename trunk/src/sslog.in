@@ -79,13 +79,14 @@ class sslog_parser:
                 category_name in categories["State"] or \
                 category_name in categories["Arrow"]:
             Es("%s:%d: warning: category_name %s already defined (ignored)\n"
-               % category_name)
+               % (filename, line_no, category_name))
             return 1            # OK, go ahead
         topo = "State"                   # default topology: state
         R,G,B,opacity,width = None,None,None,None,None
         if n > 2: topo = fields[2].capitalize()
         if topo not in [ "State", "Arrow", "Event" ]:
-            Es("%s:%d: topologymust be one of State, Arrow, or Event\n")
+            Es("%s:%d: topologymust be one of State, Arrow, or Event\n"
+               % (filename, line_no))
             return 0            # NG
         if n > 3: R = int(fields[3])
         if n > 4: G = int(fields[4])
