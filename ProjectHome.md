@@ -1,0 +1,2 @@
+This is a simple file format for recording events in your program and a converter from this format to slog2 format, the native format used by jumpshot-4 performance visualizer developed by Argonne National Laboratory.
+The intent is to make it as straightforward as possible for you to take advantage of jumpshot-4 for your program (not just MPICH, the communication library jumpshot-4 is primarily used with).
