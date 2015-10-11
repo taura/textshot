@@ -1,5 +1,6 @@
 slog2_dir=../slog2/slog2sdk-1.2.6
-input_log_c=$(slog2_dir)/src/logformat/trace/logformat_trace_InputLog.c
+input_log_c=../slog2/slog2sdk-1.2.6/src/logformat/trace/logformat_trace_InputLog.c
+AUTOMAKE_OPTIONS=subdir-objects
 lib_LTLIBRARIES = libTraceInput.la
 libTraceInput_la_SOURCES = sslog_trace_impl.c $(input_log_c)
 libTraceInput_la_CFLAGS = -I$(slog2_dir)/src/logformat/trace

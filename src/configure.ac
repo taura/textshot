@@ -4,13 +4,18 @@
 AC_PREREQ([2.67])
 AC_INIT([sslog], [1.0], [sslog@logos.t.u-tokyo.ac.jp], [sslog], [http://code.google.com/p/sslog/])
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
+# required when you build shared libraries, relying on libtool
+AC_CONFIG_MACRO_DIR([m4])
+# avoid executing autotools on the user side
+AM_MAINTAINER_MODE([disable])
 AC_CONFIG_HEADERS([trace_impl.h])
 AC_CONFIG_MACRO_DIR([m4])
 
 # Checks for programs.
+AM_PROG_CC_C_O
+AM_PROG_AR
 AC_PROG_CC
 AC_PROG_LIBTOOL
-AM_PROG_CC_C_O
 # Checks for libraries.
 
 # Checks for header files.
